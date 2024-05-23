@@ -17,7 +17,7 @@ function add_new_agendor_action_func( $form_actions_registrar ) {
 			public function register_settings_section( $widget ) {
 				
 			$widget->start_controls_section(
-					'section_sendy',
+					'agendor_section',
 					[
 						'label' => esc_html__( 'Agendor', 'default' ),
 						'condition' => [
@@ -33,49 +33,65 @@ function add_new_agendor_action_func( $form_actions_registrar ) {
 						'label' => esc_html__( 'Token', 'default' ),
 						'type' => \Elementor\Controls_Manager::TEXT,
 						'placeholder' => '',
-						'description' => esc_html__( 'Enter the URL where you have Sendy installed.', 'default' ),
+						'description' => 'To authenticate your requests, you need an API token. You can find your token by logging into Agendor, and going to <a href="https://web.agendor.com.br/sistema/integracoes" target="_blank">Menu > Integrações.</a> This token is like your password, so keep it secret!',
 					]
 				);		
 				$widget->end_controls_section();
 			}
 			
-			public function run( $record, $ajax_handler ) {
+public function run( $record, $ajax_handler ) {
+			
+$settings = $record->get( 'form_settings' );
+$raw_fields = $record->get( 'fields' );
 				
-		$settings = $record->get( 'form_settings' );
+$agendor_token = isset($settings['agendor_token']) ? $settings['agendor_token'] : '';				
+
+//Normalize_form_data.
+$fields = [];
+if(is_array($raw_fields) && count($raw_fields) > 0){
+foreach($raw_fields as $id => $field){
+$fields[$id] = $field['value'];
+}
+}
+
+$form_geral_nome = isset($fields['form_geral_nome']) ? $fields['form_geral_nome'] : '';
+$form_geral_email = isset($fields['form_geral_email']) ? $fields['form_geral_email'] : '';
+$form_geral_telefone = isset($fields['form_geral_telefone']) ? $fields['form_geral_telefone'] : '';
+$form_custom_field_finalidade = isset($fields['field_e762c4a']) ? $fields['field_e762c4a'] : '';
+$leadOrigin = 'Site Smartbox';
+$finalidade = "Finalidade: {$form_custom_field_finalidade}";
+	
+$url_api = "https://api.agendor.com.br/v3/people";
+
+$data = array(
+'name' => $form_geral_nome,
+"contact" => array(
+"email" => $form_geral_email,
+"mobile" => $form_geral_telefone
+),
+'leadOrigin' => $leadOrigin,	
+'description' => $finalidade
+);
+$data = json_encode($data);
+	
+$curl = curl_init();
+curl_setopt($curl, CURLOPT_HTTPHEADER, array("Authorization: Token {$agendor_token}","Content-Type: application/json"));
+curl_setopt($curl, CURLOPT_URL,$url_api);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
+curl_setopt($curl, CURLOPT_VERBOSE, 0);
+curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+
+$response = curl_exec($curl);
+curl_close($curl);
 				
-		$agendor_token = isset($settings['agendor_token']) ? $settings['agendor_token'] : '';
-
-		if ( empty( $agendor_token ) ) {
-			return;
-		}				
-				$raw_fields = $record->get( 'fields' );
-
-				// Normalize form data.
-				$fields = [];
-				foreach ( $raw_fields as $id => $field ) {
-					$fields[ $id ] = $field['value'];
-				}		
-
-		/* ENVIAR API AGENDOR */
-				wp_remote_post(
-					'https://api.example.com/',
-					[
-						'method' => 'GET',
-						'headers' => [
-							'Content-Type' => 'application/json',
-						],
-						'body' => wp_json_encode([
-							'site' => get_home_url(),
-							'action' => 'Form submitted',
-						]),
-						'httpversion' => '1.0',
-						'timeout' => 60,
-					]
-				);
-
 			}
 
-			public function on_export( $element ) {}
+			public function on_export( $element ) {
+				
+				unset($element['agendor_token']);
+				return $element;
+				
+			}
 
 		}
 	}
